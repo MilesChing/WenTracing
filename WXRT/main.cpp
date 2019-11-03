@@ -18,7 +18,7 @@ wxrt::triangle triangles[]{
 	{{0.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f}, 1},
 	{{0.0f, 1.0f, 0.5f}, {0.5f, 1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, 0},
 	{{0.0f, 0.0f, 1.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 1.0f, 1.0f}, {1.0f, 0.0f, 0.0f}, 2},
-	{{0.0f, 0.0f, 1.0f}, {1.0f, 0.0f, 1.0f}, {0.0f, 1.0f, 1.0f}, {0.0f, 0.0f, 1.0f}, 0},
+	{{0.0f, 0.0f, 1.0f}, {1.0f, 0.0f, 1.0f}, {0.0f, 1.0f, 1.0f}, {0.0f, 0.0f, -1.0f}, 0},
 	{{2.0f, 2.0f, 0.0f}, {2.0f, -2.0f, 0.0f}, {-2.0f, -2.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, 2},
 	{{2.0f, 2.0f, 0.0f}, {-2.0f, 2.0f, 0.0f}, {-2.0f, -2.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, 2},
 };
@@ -41,7 +41,7 @@ wxrt::crossable* crossables[]{
 
 wxrt::light_source* light_sources[]{
 	point_lights + 0,
-	//point_lights + 1,
+	point_lights + 1,
 };
 
 wxrt::material materials[]{
@@ -59,19 +59,19 @@ const float halfpi = pi / 2.0f;
 
 const int max_ray_cnt = 32;
 const int max_depth = 4;
-const int view_row = 1024;
-const int view_col = 1024;
+const int view_row = 400;
+const int view_col = 600;
 
-const float_3 eye(3.0f, 1.5f, 0.5f);
-const float_3 look_at(-3.0f, -1.5f, 0.0f);
+const float_3 eye(3.0f, 2.0f, 0.5f);
+const float_3 look_at(-3.0f, -2.0f, 0.0f);
 const float_3 up(0.0f, 0.0f, 1.0f);
 
 const float view_distance_to_eye = 1.0f;
-const float view_resolusion = 0.001f;
+const float view_resolusion = 0.002f;
 
 const float_3 ambient_color = float_3(0.05f, 0.05f, 0.05f);
 
-const uint sample_phong_cnt = 64;
+const uint sample_phong_cnt = 16;
 const int pixel_sample_cnt = 8;
 
 inline float randf() {
@@ -79,12 +79,10 @@ inline float randf() {
 }
 
 inline bool check_cross(const float_3& original_point, const float_3& dir, float& alpha, 
-	uint& crossable_index, uint ignore_crossable = -1) {
+	uint& crossable_index) {
 	float min_alpha = 1e10;
 	for (uint i = 0; i < len(crossables); ++i) {
-		if (i != ignore_crossable && 
-			crossables[i]->check_cross(original_point, dir, alpha) 
-			&& alpha < min_alpha) {
+		if (crossables[i]->check_cross(original_point, dir, alpha) && alpha < min_alpha) {
 			min_alpha = alpha;
 			crossable_index = i;
 		}
@@ -97,8 +95,7 @@ inline bool check_cross(const float_3& original_point, const float_3& dir, float
 float ignore_float;
 uint ignore_uint;
 
-inline float_3 render_phong(uint current_crossable, const float_3& current_point,
-	const float_3& view_dir) {
+inline float_3 render_phong(uint current_crossable, const float_3& current_point, const float_3& view_dir) {
 	float_3 normal = crossables[current_crossable]->get_normal(current_point);
 	float_3 result(0.0f, 0.0f, 0.0f);
 	bool crossed = false;
@@ -143,10 +140,11 @@ inline float_3 sample_phong(const float_3& current_point, const float_3& normal,
 		new_dir.y = tmp2.y;
 		new_dir.z = tmp1.z;
 		//render phong
-		if (check_cross(current_point, new_dir, alpha, crossable_id, current_crossable)) {
+		if (check_cross(current_point, new_dir, alpha, crossable_id)) {
 			float_3 cross_point = current_point + new_dir * alpha;
-			if(dot(new_dir, crossables[crossable_id]->get_normal(cross_point)) < 0)
-				res = res + render_phong(crossable_id, cross_point, new_dir) * cos_theta;
+			float_3 cross_norm = crossables[crossable_id]->get_normal(cross_point);
+			cross_point = cross_point + cross_norm * 0.0001f;
+			res = res + render_phong(crossable_id, cross_point, new_dir) * cos_theta;
 		}
 	}
 
@@ -160,12 +158,9 @@ inline float_3 sample_all(const float_3& original_point, const float_3& view_dir
 		return float_3(0.0, 0.0, 0.0);
 	float_3 cross_point = original_point + view_dir * alpha;
 	float_3 normal = crossables[crossable_index]->get_normal(cross_point);
-	float_3 render_phong_res;
-	if (dot(view_dir, normal) < 0)
-		render_phong_res = render_phong(crossable_index, cross_point, view_dir);
-	else render_phong_res = ambient_color * materials[
-		crossables[crossable_index]->get_material_id()
-	]._ka;
+	//set small offset and render phong
+	cross_point = cross_point + normal * 0.0001f;
+	float_3 render_phong_res = render_phong(crossable_index, cross_point, view_dir);
 	return sample_phong(cross_point, normal, sample_phong_cnt, crossable_index) + render_phong_res;
 }
 
@@ -269,7 +264,7 @@ cv::Mat view;
 std::mutex view_mtx;
 
 int main() {
-	cv::namedWindow("wxnb", cv::WINDOW_FREERATIO);
+	cv::namedWindow("wxnb", cv::WINDOW_AUTOSIZE);
 	view = cv::Mat(view_row, view_col, CV_8UC3);
 	const float_3 hori = normalize(cross(up, look_at)) * -1.0;
 	const float_3 vert = normalize(up) * -1.0;
@@ -277,21 +272,25 @@ int main() {
 		- hori * (view_col / 2 * view_resolusion)
 		- vert * (view_row / 2 * view_resolusion);
 
-	for (int i = 0; i < view_row; ++i) {
-		parallel_for(0, view_col, 1, [&](uint j) {
-			float_3 o = origin + hori * j * view_resolusion +
-				vert * i * view_resolusion;
-			float_3 delta = normalize(o - eye);
-			cv::Vec3b& v = view.at<cv::Vec3b>(i, j);
-			float_3 res(0.0f, 0.0f, 0.0f);
-			res = res + sample_all(o, delta);
-			v[0] = (int)(min(res.z, 1.0f) * 255.0f);
-			v[1] = (int)(min(res.y, 1.0f) * 255.0f);
-			v[2] = (int)(min(res.x, 1.0f) * 255.0f);
-		});
-	}
+	for(uint t = 0;; ++t){
+		point_lights[0] = point_light(float_3(cos(t / 100.0) * 2.0f, sin(t / 100.0) * 2.0f, 2.0f));
+		for (int i = 0; i < view_row; ++i) {
+			parallel_for(0, view_col, 1, [&](uint j) {
+				float_3 o = origin + hori * j * view_resolusion +
+					vert * i * view_resolusion;
+				float_3 delta = normalize(o - eye);
+				cv::Vec3b& v = view.at<cv::Vec3b>(i, j);
+				float_3 res(0.0f, 0.0f, 0.0f);
+				res = res + sample_all(o, delta);
+				v[0] = (int)(min(res.z, 1.0f) * 255.0f);
+				v[1] = (int)(min(res.y, 1.0f) * 255.0f);
+				v[2] = (int)(min(res.x, 1.0f) * 255.0f);
+				});
+		}
 
-	cv::imshow("wxnb", view);
-	cv::waitKey(0);
+		cv::imshow("wxnb", view);
+		cv::waitKey(1);
+	}
+	
 	return 0;
 }
