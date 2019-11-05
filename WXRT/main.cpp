@@ -161,8 +161,7 @@ inline float_3 sample_all(const float_3& original_point, const float_3& view_dir
 	//set small offset and render phong
 	cross_point = cross_point + normal * 0.0001f;
 	float_3 render_phong_res = render_phong(crossable_index, cross_point, view_dir);
-	return render_phong_res;
-	return sample_phong(cross_point, normal, sample_phong_cnt, crossable_index) + render_phong_res;
+	return sample_phong(cross_point, normal, sample_phong_cnt, crossable_index);// +render_phong_res;
 }
 
 float_3 cal(uint shape_id, const float_3& cross_point,
