@@ -29,7 +29,8 @@ using namespace concurrency::graphics;
 #define cons_camera_up float_3(0.0f, 0.0f, 1.0f)
 
 #define cons_view_distance_to_eye 1.0f
-#define cons_view_resolusion 0.002f
+#define cons_view_resolusion 0.0015f
+#define sample_phong_cnt 64
 
 uint xorshift(uint& x, uint& y, uint& z) restrict(amp) {
 	uint t;
@@ -81,7 +82,7 @@ inline float randf(def_params_random) restrict(amp) {
 }
 
 inline float_3 get_ambient_color() restrict(amp) {
-	return float_3(0.1f, 0.1f, 0.1f);
+	return float_3(0.01f, 0.01f, 0.01f);
 }
 
 inline uint make_id_triangle(uint id) restrict(amp) {
@@ -210,16 +211,15 @@ inline float_3 sample_all(const float_3& original_point, const float_3& view_dir
 	cross_point = cross_point + normal * 0.0001f;
 	float_3 render_phong_res = render_phong(crossable_index, cross_point, view_dir, 
 		normal, material, arr_point_lights, arr_triangles);
-	const int sample_phong_cnt = 128;
 	return sample_phong(cross_point, normal, sample_phong_cnt, crossable_index, arr_materials,
 		set_params_crossables, set_params_light_sources, set_params_random) + render_phong_res;
 }
 
 cv::Mat view;
+uint random_table[cons_view_row * cons_view_col];
 
 int main() {
 
-	uint random_table[cons_view_row * cons_view_col];
 
 	cv::namedWindow("wxnb", cv::WINDOW_AUTOSIZE);
 	view = cv::Mat(cons_view_row, cons_view_col, CV_8UC3);

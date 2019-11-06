@@ -63,4 +63,19 @@ namespace wxrt {
 		alpha = dot(e2, q) / det;
 		return alpha > 0;
 	}
+
+	struct sphere {
+		float_3 o;
+		float r;
+		uint material_id;
+	};
+
+	inline bool check_cross(const float_3& original_point, const float_3& dir, float& alpha,
+		const sphere& sphere) restrict(amp) {
+		//TODO: WENXIN
+	}
+
+	inline float_3 get_normal(const sphere& sphere, const float_3& at) {
+		//TODO: WENXIN
+	}
 }
