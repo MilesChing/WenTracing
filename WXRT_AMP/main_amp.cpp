@@ -30,9 +30,21 @@ using namespace concurrency::graphics;
 
 #define cons_view_distance_to_eye 1.0f
 #define cons_view_resolusion 0.0015f
-#define sample_phong_cnt 64
+#define cons_sample_phong_cnt 32
+#define cons_pixel_sample_cnt 4
 
 uint xorshift(uint& x, uint& y, uint& z) restrict(amp) {
+	uint t;
+	x ^= x << 16;
+	x ^= x >> 5;
+	x ^= x << 1;
+	t = x;
+	x = y;
+	y = z;
+	return z = t ^ x ^ y;
+}
+
+uint xorshift(uint& x, uint& y, uint& z) {
 	uint t;
 	x ^= x << 16;
 	x ^= x >> 5;
@@ -196,6 +208,14 @@ inline float_3 sample_phong(const float_3& current_point, const float_3& normal,
 	return res / (float)sample_cnt;
 }
 
+inline float_3 multi_sample_1(const float_3& current_point, const float_3& normal, uint sample_cnt,
+	uint current_crossable, const concurrency::array<material, 1>& arr_materials,
+	def_params_crossables,
+	def_params_light_sources,
+	def_params_random) restrict(amp) {
+
+}
+
 inline float_3 sample_all(const float_3& original_point, const float_3& view_dir, 
 	const concurrency::array<material, 1>& arr_materials,
 	def_params_crossables, def_params_light_sources, def_params_random) restrict(amp) {
@@ -211,36 +231,43 @@ inline float_3 sample_all(const float_3& original_point, const float_3& view_dir
 	cross_point = cross_point + normal * 0.0001f;
 	float_3 render_phong_res = render_phong(crossable_index, cross_point, view_dir, 
 		normal, material, arr_point_lights, arr_triangles);
-	return sample_phong(cross_point, normal, sample_phong_cnt, crossable_index, arr_materials,
+	return sample_phong(cross_point, normal, cons_sample_phong_cnt, crossable_index, arr_materials,
 		set_params_crossables, set_params_light_sources, set_params_random) + render_phong_res;
 }
 
 cv::Mat view;
-uint random_table[cons_view_row * cons_view_col];
+uint random_table[cons_view_row * cons_view_col * cons_pixel_sample_cnt];
+
+void init_random_table() {
+	uint x = rand(), y = rand(), z = rand();
+	for (int i = 0; i < cons_view_row; ++i)
+		for (int j = 0; j < cons_view_col; ++j)
+			for (int k = 0; k < cons_pixel_sample_cnt; ++k)
+				random_table[(i * cons_view_col + j) * cons_pixel_sample_cnt + k]
+					= xorshift(x, y, z);
+}
 
 int main() {
-
-
+	srand(time(0));
 	cv::namedWindow("wxnb", cv::WINDOW_AUTOSIZE);
 	view = cv::Mat(cons_view_row, cons_view_col, CV_8UC3);
 
-	concurrency::array_view<float_3, 2> arr_view_results(cons_view_row, cons_view_col);
+	concurrency::array_view<float_3, 3> arr_view_results(cons_view_row, cons_view_col, cons_pixel_sample_cnt);
 	concurrency::array<triangle, 1> arr_triangles(len(triangles), triangles);
 	concurrency::array<material, 1> arr_materials(len(materials), materials);
+
+	init_random_table();
 
 	for (uint t = 0;; ++t) {
 		point_lights[0].loc = float_3(cos(t / 100.0) * 2.0f, sin(t / 100.0) * 2.0f, 2.0f);
 
 		concurrency::array<point_light, 1> arr_point_lights(len(point_lights), point_lights);
+		concurrency::array<uint, 3> arr_random(cons_view_row, cons_view_col, 
+			cons_pixel_sample_cnt, random_table);
 
-		for(int i = 0; i < cons_view_row; ++i)
-			for (int j = 0; j < cons_view_col; ++j) 
-				random_table[i * cons_view_col + j] = rand() * 1.0f / RAND_MAX * 0xffffffff;
-
-		concurrency::array<uint, 2> arr_random(cons_view_row, cons_view_col, random_table);
 		parallel_for_each(arr_view_results.extent,
 			[=, &arr_materials, &arr_point_lights, 
-				&arr_triangles, &arr_random](index<2> idx) restrict(amp) {
+				&arr_triangles, &arr_random](index<3> idx) restrict(amp) {
 				uint r = idx[0], c = idx[1];
 
 				const float_3 hori = normalize(cross(cons_camera_up, cons_look_at)) * -1.0;
@@ -259,10 +286,15 @@ int main() {
 					set_params_crossables, set_params_light_sources, set_params_random);
 			});
 
+		init_random_table();
+
 		for (int i = 0; i < cons_view_row; ++i)
-			for (int j = 0; j < cons_view_col; ++j) {
+			for (int j = 0; j < cons_view_col; ++j){
 				cv::Vec3b& v = view.at<cv::Vec3b>(i, j);
-				float_3 res = arr_view_results.operator[](index<2>(i, j));
+				float_3 res(0.0f, 0.0f, 0.0f);
+				for(int k = 0; k < cons_pixel_sample_cnt; ++k)
+					res += arr_view_results[index<3>(i, j, k)];
+				res /= cons_pixel_sample_cnt;
 				v[0] = min(res.b, 1.0f) * 255;
 				v[1] = min(res.g, 1.0f) * 255;
 				v[2] = min(res.r, 1.0f) * 255;
