@@ -54,7 +54,7 @@ namespace wxrt {
 			t = triangle.a - original_point;
 			det = -det;
 		}
-		if (det < 0) return false;
+		if (det < 0.0f) return false;
 		float u = dot(t, p);
 		if (u < 0.0f || u > det) return false;
 		float_3 q = cross(t, e1);
@@ -72,14 +72,18 @@ namespace wxrt {
 
 	inline bool check_cross(const float_3& original_point, const float_3& dir, float& alpha,
 		const sphere& sphere) restrict(amp) {
-		float_3 v = sphere.o - original_point;
-		float dis = length(cross(dir, v));
-		if (dis > sphere.r) return false;
-
+		//https://www.cnblogs.com/yoyo-sincerely/p/8401861.html
+		float_3 eo = sphere.o - original_point;
+		float v = dot(eo, dir);
+		alpha = sphere.r * sphere.r + v * v - dot(eo, eo);
+		if (alpha < 0.0f) return false;
+		alpha = v - sqrtf(alpha);
+		return alpha >= 0.0f;
 		//TODO: WENXIN
 	}
 
-	inline float_3 get_normal(const sphere& sphere, const float_3& at) {
+	inline float_3 get_normal(const sphere& sphere, const float_3& at) restrict(amp) {
+		return normalize(at - sphere.o);
 		//TODO: WENXIN
 	}
 }

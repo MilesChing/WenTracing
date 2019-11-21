@@ -67,6 +67,10 @@ wxrt::triangle triangles[]{
 	{{2.0f, 2.0f, 0.0f}, {-2.0f, 2.0f, 0.0f}, {-2.0f, -2.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, 2},
 };
 
+wxrt::sphere spheres[]{
+	{{0.5, 0.5, 0.5}, 0.3, 0}
+};
+
 wxrt::point_light point_lights[]{
 	{{1.0f, 3.0f, 2.0f}, {0.8f, 0.8f, 0.8f}, 1.0f, 0.09f, 0.032f},
 	//{{1.0f, 2.0f, 1.0f}, {0.3f, 0.3f, 0.3f}, 1.0f, 0.4f, 0.032f}
@@ -81,8 +85,9 @@ wxrt::material materials[]{
 #define set_params_random x, y, z
 #define def_params_random uint&x,uint&y,uint&z
 
-#define set_params_crossables arr_triangles
-#define def_params_crossables const concurrency::array<triangle, 1>& arr_triangles
+#define set_params_crossables arr_triangles, arr_spheres
+#define def_params_crossables const concurrency::array<triangle, 1>& arr_triangles, \
+	const concurrency::array<sphere, 1>& arr_spheres
 
 #define set_params_light_sources arr_point_lights
 #define def_params_light_sources const concurrency::array<point_light, 1>& arr_point_lights
@@ -102,37 +107,65 @@ inline uint make_id_triangle(uint id) restrict(amp) {
 	return id | 0x00000000;
 }
 
+inline uint make_id_sphere(uint id) restrict(amp) {
+	return id | 0x00010000;
+}
+
 inline bool try_parse_id_triangle(uint& id) restrict(amp) {
 	return ((id & 0xffff0000) == 0x00000000);
 }
 
-inline float_3 get_normal(uint id, 
-	const concurrency::array<triangle, 1>& arr_triangles) restrict(amp) {
+inline bool try_parse_id_sphere(uint& id) restrict(amp) {
+	if (((id & 0xffff0000) == 0x00010000)) {
+		id &= 0x0000ffff;
+		return true;
+	}
+	else return false;
+}
+
+inline float_3 get_normal(uint id, const float_3& at, def_params_crossables) restrict(amp) {
 	if (try_parse_id_triangle(id)) {
 		return arr_triangles[id].n;
 	}
+	else if (try_parse_id_sphere(id)) {
+		return get_normal(arr_spheres[id], at);
+	}
 }
 
-inline uint get_material_id(uint id,
-	const concurrency::array<triangle, 1>& arr_triangles) restrict(amp) {
+inline uint get_material_id(uint id, def_params_crossables) restrict(amp) {
 	if (try_parse_id_triangle(id)) {
 		return arr_triangles[id].material_id;
+	}
+	else if (try_parse_id_sphere(id)) {
+		return arr_spheres[id].material_id;
 	}
 }
 
 inline bool check_cross(const float_3& original_point, const float_3& dir, float& alpha, uint ignore,
 	uint& crossable_index, def_params_crossables) restrict(amp) {
 	float min_alpha = 1e10f;
+	uint cid;
 	for (uint i = 0; i < arr_triangles.extent.size(); ++i) {
-		if (i == ignore) continue;
+		cid = make_id_triangle(i);
+		if (cid == ignore) continue;
 		if (check_cross(original_point, dir, alpha, arr_triangles[i])
 			&& alpha < min_alpha) {
 			min_alpha = alpha;
-			crossable_index = i;
+			crossable_index = cid;
 		}
 	}
+
+	for (uint i = 0; i < arr_spheres.extent.size(); ++i) {
+		cid = make_id_sphere(i);
+		if (cid == ignore) continue;
+		if (check_cross(original_point, dir, alpha, arr_spheres[i])
+			&& alpha < min_alpha) {
+			min_alpha = alpha;
+			crossable_index = cid;
+		}
+	}
+
 	alpha = min_alpha;
-	crossable_index = make_id_triangle(crossable_index);
 	return min_alpha != 1e10f;
 }
 
@@ -199,7 +232,7 @@ inline float_3 sample_phong(const float_3& current_point, const float_3& normal,
 		const double ambert_a_0 = 1.0f, ambert_a_1 = 0.9f, ambert_a_2 = 0.032f;
 		if (check_cross(current_point, new_dir, alpha, current_crossable, crossable_id, set_params_crossables)) {
 			float_3 cross_point = current_point + new_dir * alpha;
-			float_3 cross_norm = get_normal(crossable_id, set_params_crossables);
+			float_3 cross_norm = get_normal(crossable_id, cross_point, set_params_crossables);
 			if (dot(cross_norm, new_dir) > 0) cross_norm = -cross_norm;
 			material current_material = arr_materials[get_material_id(crossable_id, set_params_crossables)];
 			res = res + render_phong(crossable_id, cross_point, new_dir, cross_norm, 
@@ -224,15 +257,15 @@ inline float_3 sample_all(const float_3& original_point, const float_3& view_dir
 	def_params_crossables, def_params_light_sources, def_params_random) restrict(amp) {
 	float alpha;
 	uint crossable_index = 0;
-	if (!check_cross(original_point, view_dir, alpha, -1, crossable_index, arr_triangles))
+	if (!check_cross(original_point, view_dir, alpha, -1, crossable_index, set_params_crossables))
 		return float_3(0.0f, 0.0f, 0.0f);
 	float_3 cross_point = original_point + view_dir * alpha;
-	float_3 normal = get_normal(crossable_index, arr_triangles);
+	float_3 normal = get_normal(crossable_index, cross_point, set_params_crossables);
 	if (dot(view_dir, normal) > 0) normal = -normal;
-	material material = arr_materials[get_material_id(crossable_index, arr_triangles)];
+	material material = arr_materials[get_material_id(crossable_index, set_params_crossables)];
 	//set small offset and render phong
 	float_3 render_phong_res = render_phong(crossable_index, cross_point, view_dir, 
-		normal, material, arr_point_lights, arr_triangles);
+		normal, material, arr_point_lights, set_params_crossables);
 	return sample_phong(cross_point, normal, cons_sample_phong_cnt, crossable_index, arr_materials,
 		set_params_crossables, set_params_light_sources, set_params_random) + render_phong_res;
 }
@@ -257,6 +290,7 @@ int main() {
 	concurrency::array_view<float_3, 3> arr_view_results(cons_view_row, cons_view_col, cons_pixel_sample_cnt);
 	concurrency::array<triangle, 1> arr_triangles(len(triangles), triangles);
 	concurrency::array<material, 1> arr_materials(len(materials), materials);
+	concurrency::array<sphere, 1> arr_spheres(len(spheres), spheres);
 
 	init_random_table();
 
@@ -272,7 +306,7 @@ int main() {
 
 		parallel_for_each(arr_view_results.extent,
 			[=, &arr_materials, &arr_point_lights, 
-				&arr_triangles, &arr_random](index<3> idx) restrict(amp) {
+				&arr_triangles, &arr_spheres, &arr_random](index<3> idx) restrict(amp) {
 				uint r = idx[0], c = idx[1];
 
 				const float_3 hori = normalize(cross(cons_camera_up, cons_look_at)) * -1.0;
