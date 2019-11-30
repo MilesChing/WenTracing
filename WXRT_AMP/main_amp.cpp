@@ -25,14 +25,10 @@ using namespace concurrency::graphics;
 #define cons_view_row 600u
 #define cons_view_col 800u
 
-#define cons_eye float_3(3.0f, 2.0f, 0.5f)
-#define cons_look_at float_3(-3.0f, -2.0f, 0.0f)
-#define cons_camera_up float_3(0.0f, 0.0f, 1.0f)
-
 #define cons_view_distance_to_eye 1.0f
 #define cons_view_resolusion 0.0010f
-#define cons_sample_phong_cnt 16
-#define cons_pixel_sample_cnt 4
+#define cons_sample_phong_cnt 64
+#define cons_pixel_sample_cnt 1
 
 uint xorshift(uint& x, uint& y, uint& z) restrict(amp) {
 	uint t;
@@ -57,30 +53,26 @@ uint xorshift(uint& x, uint& y, uint& z) {
 }
 
 wxrt::triangle triangles[]{
-	{{1.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, 0},
-	{{1.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f, 1.0f}, {0.0f, 1.0f, 0.0f}, 0},
-	{{0.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f}, 1},
-	{{0.0f, 1.0f, 0.5f}, {0.5f, 1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, 0},
-	{{0.0f, 0.0f, 1.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 1.0f, 1.0f}, {1.0f, 0.0f, 0.0f}, 2},
-	{{0.0f, 0.0f, 1.0f}, {1.0f, 0.0f, 1.0f}, {0.0f, 1.0f, 1.0f}, {0.0f, 0.0f, -1.0f}, 0},
-	{{2.0f, 2.0f, 0.0f}, {2.0f, -2.0f, 0.0f}, {-2.0f, -2.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, 2},
-	{{2.0f, 2.0f, 0.0f}, {-2.0f, 2.0f, 0.0f}, {-2.0f, -2.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, 1},
+	{{-10.0f, 10.0f, 0.0f}, {-10.0f, -10.0f, 0.0f}, {10.0f, -10.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, 0},
+	{{-10.0f, 10.0f, 0.0f}, {10.0f, 10.0f, 0.0f}, {10.0f, -10.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, 0},
 };
 
 wxrt::sphere spheres[]{
-	{{0.5, 0.5, 0.5}, 0.3, 1},
-	{{1.0, 0.5, 1.0}, 0.3, 0}
+	{{0.0, -0.3, 0.3}, 0.3, 1},
+	{{0.6, -0.3, 0.3}, 0.3, 2},
+	{{0.0, -0.9, 0.3}, 0.3, 3},
+	{{1.2, 0.0, 0.3}, 0.3, 0}
 };
 
 wxrt::point_light point_lights[]{
-	{{1.0f, 3.0f, 2.0f}, {0.8f, 0.8f, 0.8f}, 1.0f, 0.09f, 0.032f},
-	//{{1.0f, 2.0f, 1.0f}, {0.3f, 0.3f, 0.3f}, 1.0f, 0.4f, 0.032f}
+	{{1.0f, 3.0f, 2.0f}, {0.8f, 0.8f, 0.8f}, 1.0f, 0.09f, 0.032f}
 };
 
 wxrt::material materials[]{
-	{{1.0f, 1.0f, 1.0f}, {0.6f, 0.6f, 0.6f}, {0.4f, 0.4f, 0.4f}, 32.0f },	//white triangle
-	{{1.0f, 0.1f, 0.1f}, {0.6f, 0.06f, 0.06f}, {0.4f, 0.04f, 0.04f}, 32.0f },	//red triangle
-	{{0.1f, 0.4f, 1.0f}, {0.06f, 0.6f, 0.06f}, {0.04f, 0.4f, 0.04f}, 32.0f },	//blue triangle
+	{{1.0f, 1.0f, 1.0f}, {0.6f, 0.6f, 0.6f}, {0.4f, 0.4f, 0.4f}, 32.0f },	//white
+	{{1.0f, 0.1f, 0.1f}, {0.6f, 0.06f, 0.06f}, {0.4f, 0.04f, 0.04f}, 32.0f },	//red
+	{{0.1f, 1.0f, 0.1f}, {0.06f, 0.6f, 0.06f}, {0.04f, 0.4f, 0.04f}, 32.0f },	//green
+	{{0.1f, 0.1f, 1.0f}, {0.06f, 0.06f, 0.6f}, {0.04f, 0.04f, 0.4f}, 32.0f },	//blue
 };
 
 #define set_params_random x, y, z
@@ -170,6 +162,32 @@ inline bool check_cross(const float_3& original_point, const float_3& dir, float
 	return min_alpha != 1e10f;
 }
 
+inline float_3 random_direction(const float_3& normal, const float_3& n_1, 
+	const float_3& n_2, def_params_random) restrict(amp) {
+	float radius = randf(set_params_random);
+	float height = sqrt(1.0f - radius * radius);
+	float select = randf(set_params_random) * 4.0f;
+	float select_1, select_2;
+	if (select < 1.0f) {
+		select_1 = select;
+		select_2 = sqrt(1 - select_1 * select_1);
+	}
+	else if (select < 2.0f) {
+		select_1 = - (select - 1.0f);
+		select_2 = sqrt(1 - select_1 * select_1);
+	}
+	else if (select < 3.0f) {
+		select_1 = -(select - 2.0f);
+		select_2 = -sqrt(1 - select_1 * select_1);
+	}
+	else {
+		select_1 = select - 3.0f;
+		select_2 = -sqrt(1 - select_1 * select_1);
+	}
+	float_3 r = select_1 * n_1 + select_2 * n_2;
+	return normal * height + r * radius;
+}
+
 inline float_3 render_phong(uint current_crossable, const float_3& current_point, 
 	const float_3& view_dir,
 	const float_3& current_normal,
@@ -200,35 +218,19 @@ inline float_3 sample_phong(const float_3& current_point, const float_3& normal,
 	def_params_crossables,
 	def_params_light_sources,
 	def_params_random) restrict(amp) {
-	float theta_zy = atan2(normal.y, normal.z);
-	float theta_yx = atan2(normal.x, normal.y);
-	if (normal.x == normal.y && normal.x == 0.0f) theta_yx = 0.0f;
-	if (normal.z == normal.y && normal.z == 0.0f) theta_zy = 0.0f;
-	float cos_theta_zy = cos(theta_zy);
-	float sin_theta_zy = sin(theta_zy);
-	float cos_theta_yx = cos(theta_yx);
-	float sin_theta_yx = sin(theta_yx);
-	float_3 new_dir, tmp1, tmp2, res(0.0f, 0.0f, 0.0f);
-	float alpha;
+	float_3 new_dir, res(0.0f, 0.0f, 0.0f);
+	float alpha, cos_theta;
 	uint crossable_id;
 
+	float_3 n_1, n_2;
+	if (normal.z != 0.0f) n_1 = float_3(1.0f, 1.0f, -(normal.x + normal.y) / normal.z);
+	else if (normal.y != 0.0f) n_1 = float_3(1.0f, -(normal.x + normal.z) / normal.y, 1.0f);
+	else n_1 = float_3(-(normal.y + normal.z) / normal.x, 1.0f, 1.0f);
+	n_2 = normalize(cross(n_1, normal));
+	n_1 = normalize(n_1);
+
 	for (uint i = 0; i < sample_cnt; ++i) {
-		float cos_theta = randf(set_params_random);
-		float theta = acos(cos_theta);
-		float phi = randf(set_params_random) * cons_2_pi;
-		float sin_theta = sin(theta);
-		new_dir.x = sin_theta * cos(phi);
-		new_dir.y = sin_theta * sin(phi);
-		new_dir.z = cos_theta;
-		//rotate direction to normal
-		tmp1.x = new_dir.x;
-		tmp1.z = cos_theta_zy * new_dir.z - sin_theta_zy * new_dir.y;
-		tmp1.y = sin_theta_zy * new_dir.z + cos_theta_zy * new_dir.y;
-		tmp2.y = cos_theta_yx * tmp1.y - sin_theta_yx * tmp1.x;
-		tmp2.x = sin_theta_yx * tmp1.y + cos_theta_yx * tmp1.x;
-		new_dir.x = tmp2.x;
-		new_dir.y = tmp2.y;
-		new_dir.z = tmp1.z;
+		new_dir = random_direction(normal, n_1, n_2, set_params_random);
 		//render phong
 		const double ambert_a_0 = 1.0f, ambert_a_1 = 0.9f, ambert_a_2 = 0.032f;
 		if (check_cross(current_point, new_dir, alpha, current_crossable, crossable_id, set_params_crossables)) {
@@ -302,24 +304,29 @@ int main() {
 
 	for (uint t = 0;; ++t) {
 		GetLocalTime(&time);
-		point_lights[0].loc = float_3(cos(t / 100.0) * 2.0f, sin(t / 100.0) * 2.0f, 2.0f);
+		//point_lights[0].loc = float_3(cos(t / 64.0) * 2.0f, sin(t / 64.0) * 2.0f, 2.0f);
 
 		concurrency::array<point_light, 1> arr_point_lights(len(point_lights), point_lights);
+
+		float_3 eye(cos(t / 64.0) * 3.0f, sin(t / 64.0) * 3.0f, 0.5f);
+		float_3 look_at = -eye;
+		look_at.z = 0.0f;
+		float_3 camera_up(0.0f, 0.0f, 1.0f);
 
 		parallel_for_each(arr_view_results.extent,
 			[=, &arr_materials, &arr_point_lights, 
 				&arr_triangles, &arr_spheres, &arr_random](index<3> idx) restrict(amp) {
 				uint r = idx[0], c = idx[1];
 
-				const float_3 hori = normalize(cross(cons_camera_up, cons_look_at)) * -1.0;
-				const float_3 vert = normalize(cons_camera_up) * -1.0;
-				const float_3 origin = cons_eye + normalize(cons_look_at) * cons_view_distance_to_eye
+				const float_3 hori = normalize(cross(camera_up, look_at)) * -1.0;
+				const float_3 vert = normalize(camera_up) * -1.0;
+				const float_3 origin = eye + normalize(look_at) * cons_view_distance_to_eye
 					- hori * (cons_view_col / 2 * cons_view_resolusion)
 					- vert * (cons_view_row / 2 * cons_view_resolusion);
 
 				float_3 o = origin + hori * c * cons_view_resolusion +
 					vert * r * cons_view_resolusion;
-				float_3 delta = normalize(o - cons_eye);
+				float_3 delta = normalize(o - eye);
 
 				uint& x = arr_random[idx + 1], y = arr_random[idx], z = arr_random[idx - 1];
 
