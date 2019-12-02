@@ -22,13 +22,13 @@ using namespace concurrency::graphics;
 #define cons_2_pi (3.14159265f * 2.0f);
 #define cons_pi_2 (3.14159265f / 2.0f);
 
-#define cons_view_row 600u
-#define cons_view_col 800u
+#define cons_view_row 480u
+#define cons_view_col 720u
 
 #define cons_view_distance_to_eye 1.0f
-#define cons_view_resolusion 0.0010f
+#define cons_view_resolusion 0.0015f
 #define cons_sample_phong_cnt 64
-#define cons_pixel_sample_cnt 1
+#define cons_pixel_sample_cnt 2
 
 uint xorshift(uint& x, uint& y, uint& z) restrict(amp) {
 	uint t;
@@ -52,16 +52,28 @@ uint xorshift(uint& x, uint& y, uint& z) {
 	return z = t ^ x ^ y;
 }
 
+#define init_triangle(ax, ay, az, bx, by, bz, cx, cy, cz, material_id)	\
+	{{ax, ay, az}, {bx, by, bz}, {cx, cy, cz}, \
+	normalize(cross(float_3(bx, by, bz) - float_3(ax, ay, az), \
+	float_3(cx, cy, cz) - float_3(ax, ay, az))), material_id, \
+	/*{max(max(ax, bx), cx), max(max(ay, by), cy), max(max(az, bz), cz)},	\
+	{min(min(ax, bx), cx), min(min(ay, by), cy), min(min(az, bz), cz)}*/}
+
+#define init_sphere(ox, oy, oz, r, material_id)	\
+	{{ox, oy, oz}, r, material_id/*, {ox + r, oy + r, oz + r}, {ox - r, oy - r, oz - r}*/}
+
 wxrt::triangle triangles[]{
-	{{-10.0f, 10.0f, 0.0f}, {-10.0f, -10.0f, 0.0f}, {10.0f, -10.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, 0},
-	{{-10.0f, 10.0f, 0.0f}, {10.0f, 10.0f, 0.0f}, {10.0f, -10.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, 0},
+	init_triangle(-10.0f, 10.0f, 0.0f,  -10.0f, -10.0f, 0.0f,  10.0f, -10.0f, 0.0f,  0),
+	init_triangle(-10.0f, 10.0f, 0.0f,  10.0f, 10.0f, 0.0f,  10.0f, -10.0f, 0.0f,  0),
 };
 
 wxrt::sphere spheres[]{
-	{{0.0, -0.3, 0.3}, 0.3, 1},
-	{{0.6, -0.3, 0.3}, 0.3, 2},
-	{{0.0, -0.9, 0.3}, 0.3, 3},
-	{{1.2, 0.0, 0.3}, 0.3, 0}
+	init_sphere(0.0, -0.3, 0.3,  0.3,  1),
+	init_sphere(0.6, -0.3, 0.3,  0.3,  2),
+	init_sphere(0.0, -0.9, 0.3,  0.3,  3),
+	init_sphere(1.2, 0.0, 0.3,  0.3,  0),
+	init_sphere(-0.8, 0.0, 0.3,  0.3,  0),
+	init_sphere(0.0, 0.6, 0.3,  0.3,  4)
 };
 
 wxrt::point_light point_lights[]{
@@ -69,10 +81,11 @@ wxrt::point_light point_lights[]{
 };
 
 wxrt::material materials[]{
-	{{1.0f, 1.0f, 1.0f}, {0.6f, 0.6f, 0.6f}, {0.4f, 0.4f, 0.4f}, 32.0f },	//white
-	{{1.0f, 0.1f, 0.1f}, {0.6f, 0.06f, 0.06f}, {0.4f, 0.04f, 0.04f}, 32.0f },	//red
-	{{0.1f, 1.0f, 0.1f}, {0.06f, 0.6f, 0.06f}, {0.04f, 0.4f, 0.04f}, 32.0f },	//green
-	{{0.1f, 0.1f, 1.0f}, {0.06f, 0.06f, 0.6f}, {0.04f, 0.04f, 0.4f}, 32.0f },	//blue
+	{{1.0f, 1.0f, 1.0f}, {0.6f, 0.6f, 0.6f}, 1.0f, 5.0f },	//white
+	{{0.6f, 0.06f, 0.06f}, {0.6f, 0.06f, 0.06f}, 1.0f, 5.0f },	//red
+	{{0.06f, 0.6f, 0.06f}, {0.06f, 0.6f, 0.06f}, 1.0f, 5.0f },	//green
+	{{0.06f, 0.06f, 0.6f}, {0.06f, 0.06f, 0.6f}, 1.0f, 5.0f },	//blue
+	{{0.06f, 0.8f, 0.8f}, {0.06f, 0.8f, 0.8f}, 1.0f, 5.0f },	//
 };
 
 #define set_params_random x, y, z
@@ -170,19 +183,19 @@ inline float_3 random_direction(const float_3& normal, const float_3& n_1,
 	float select_1, select_2;
 	if (select < 1.0f) {
 		select_1 = select;
-		select_2 = sqrt(1 - select_1 * select_1);
+		select_2 = sqrt(1.0f - select_1 * select_1);
 	}
 	else if (select < 2.0f) {
 		select_1 = - (select - 1.0f);
-		select_2 = sqrt(1 - select_1 * select_1);
+		select_2 = sqrt(1.0f - select_1 * select_1);
 	}
 	else if (select < 3.0f) {
 		select_1 = -(select - 2.0f);
-		select_2 = -sqrt(1 - select_1 * select_1);
+		select_2 = -sqrt(1.0f - select_1 * select_1);
 	}
 	else {
 		select_1 = select - 3.0f;
-		select_2 = -sqrt(1 - select_1 * select_1);
+		select_2 = -sqrt(1.0f - select_1 * select_1);
 	}
 	float_3 r = select_1 * n_1 + select_2 * n_2;
 	return normal * height + r * radius;
@@ -213,11 +226,14 @@ inline float_3 render_phong(uint current_crossable, const float_3& current_point
 	return result;
 }
 
-inline float_3 sample_phong(const float_3& current_point, const float_3& normal, uint sample_cnt,
+inline float_3 sample_phong(const float_3& current_point, const float_3& normal, const float_3& view_dir, uint sample_cnt,
 	uint current_crossable, const concurrency::array<material, 1>& arr_materials,
 	def_params_crossables,
 	def_params_light_sources,
 	def_params_random) restrict(amp) {
+#ifdef ONLY_PHONG
+	return 0.0f;
+#endif
 	float_3 new_dir, res(0.0f, 0.0f, 0.0f);
 	float alpha, cos_theta;
 	uint crossable_id;
@@ -229,30 +245,25 @@ inline float_3 sample_phong(const float_3& current_point, const float_3& normal,
 	n_2 = normalize(cross(n_1, normal));
 	n_1 = normalize(n_1);
 
+	material this_material = arr_materials[get_material_id(current_crossable, set_params_crossables)];
+	material current_material;
+
 	for (uint i = 0; i < sample_cnt; ++i) {
 		new_dir = random_direction(normal, n_1, n_2, set_params_random);
+		float brdf = this_material.brdf(-new_dir, -view_dir , normal);
+		if (brdf < 1e-2f) continue;
 		//render phong
-		const double ambert_a_0 = 1.0f, ambert_a_1 = 0.9f, ambert_a_2 = 0.032f;
 		if (check_cross(current_point, new_dir, alpha, current_crossable, crossable_id, set_params_crossables)) {
 			float_3 cross_point = current_point + new_dir * alpha;
 			float_3 cross_norm = get_normal(crossable_id, cross_point, set_params_crossables);
 			if (dot(cross_norm, new_dir) > 0) cross_norm = -cross_norm;
-			material current_material = arr_materials[get_material_id(crossable_id, set_params_crossables)];
-			res = res + render_phong(crossable_id, cross_point, new_dir, cross_norm, 
-				current_material, set_params_light_sources, set_params_crossables) / 
-				(ambert_a_0 + alpha * ambert_a_1 + alpha * alpha * ambert_a_2);
+			current_material = arr_materials[get_material_id(crossable_id, set_params_crossables)];
+			res = res + render_phong(crossable_id, cross_point, new_dir, cross_norm,
+				current_material, set_params_light_sources, set_params_crossables) 
+				* this_material._ka * brdf;
 		}
 	}
-
 	return res / (float)sample_cnt;
-}
-
-inline float_3 multi_sample_1(const float_3& current_point, const float_3& normal, uint sample_cnt,
-	uint current_crossable, const concurrency::array<material, 1>& arr_materials,
-	def_params_crossables,
-	def_params_light_sources,
-	def_params_random) restrict(amp) {
-
 }
 
 inline float_3 sample_all(const float_3& original_point, const float_3& view_dir, 
@@ -269,20 +280,22 @@ inline float_3 sample_all(const float_3& original_point, const float_3& view_dir
 	//set small offset and render phong
 	float_3 render_phong_res = render_phong(crossable_index, cross_point, view_dir, 
 		normal, material, arr_point_lights, set_params_crossables);
-	return sample_phong(cross_point, normal, cons_sample_phong_cnt, crossable_index, arr_materials,
-		set_params_crossables, set_params_light_sources, set_params_random) * material._ka + render_phong_res;
+	float_3 sample_phong_res = sample_phong(cross_point, normal, view_dir,
+		cons_sample_phong_cnt * cons_pixel_sample_cnt,
+		crossable_index, arr_materials, set_params_crossables,
+		set_params_light_sources, set_params_random);
+	return  sample_phong_res + render_phong_res;
 }
 
 cv::Mat view;
 
-uint random_table[cons_view_row * cons_view_col * cons_pixel_sample_cnt];
+uint random_table[cons_view_row * cons_view_col];
 
 void init_random_table() {
 	uint x = rand(), y = rand(), z = rand();
 	for (int i = 0; i < cons_view_row; ++i)
 		for (int j = 0; j < cons_view_col; ++j)
-			for (int k = 0; k < cons_pixel_sample_cnt; ++k)
-				random_table[(i * cons_view_col + j) * cons_pixel_sample_cnt + k]
+				random_table[i * cons_view_col + j]
 					= xorshift(x, y, z);
 }
 
@@ -291,23 +304,19 @@ int main() {
 	cv::namedWindow("wxnb", cv::WINDOW_AUTOSIZE);
 	view = cv::Mat(cons_view_row, cons_view_col, CV_8UC3);
 
-	concurrency::array_view<float_3, 3> arr_view_results(cons_view_row, cons_view_col, cons_pixel_sample_cnt);
+	concurrency::array_view<float_3, 2> arr_view_results(cons_view_row, cons_view_col);
 	concurrency::array<triangle, 1> arr_triangles(len(triangles), triangles);
 	concurrency::array<material, 1> arr_materials(len(materials), materials);
 	concurrency::array<sphere, 1> arr_spheres(len(spheres), spheres);
+	concurrency::array<point_light, 1> arr_point_lights(len(point_lights), point_lights);
 
 	init_random_table();
-	concurrency::array<uint, 3> arr_random(cons_view_row, cons_view_col, 
-		cons_pixel_sample_cnt, random_table);
+	concurrency::array<uint, 2> arr_random(cons_view_row, cons_view_col, random_table);
 
 	SYSTEMTIME time;
 
 	for (uint t = 0;; ++t) {
 		GetLocalTime(&time);
-		//point_lights[0].loc = float_3(cos(t / 64.0) * 2.0f, sin(t / 64.0) * 2.0f, 2.0f);
-
-		concurrency::array<point_light, 1> arr_point_lights(len(point_lights), point_lights);
-
 		float_3 eye(cos(t / 64.0) * 3.0f, sin(t / 64.0) * 3.0f, 0.5f);
 		float_3 look_at = -eye;
 		look_at.z = 0.0f;
@@ -315,7 +324,7 @@ int main() {
 
 		parallel_for_each(arr_view_results.extent,
 			[=, &arr_materials, &arr_point_lights, 
-				&arr_triangles, &arr_spheres, &arr_random](index<3> idx) restrict(amp) {
+				&arr_triangles, &arr_spheres, &arr_random](index<2> idx) restrict(amp) {
 				uint r = idx[0], c = idx[1];
 
 				const float_3 hori = normalize(cross(camera_up, look_at)) * -1.0;
@@ -337,10 +346,7 @@ int main() {
 		for (int i = 0; i < cons_view_row; ++i)
 			for (int j = 0; j < cons_view_col; ++j){
 				cv::Vec3b& v = view.at<cv::Vec3b>(i, j);
-				float_3 res(0.0f, 0.0f, 0.0f);
-				for(int k = 0; k < cons_pixel_sample_cnt; ++k)
-					res += arr_view_results[index<3>(i, j, k)];
-				res /= cons_pixel_sample_cnt;
+				float_3 res = arr_view_results[index<2>(i, j)];
 				v[0] = min(res.b, 1.0f) * 255;
 				v[1] = min(res.g, 1.0f) * 255;
 				v[2] = min(res.r, 1.0f) * 255;
