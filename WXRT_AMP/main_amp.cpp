@@ -26,8 +26,8 @@ using namespace concurrency::graphics;
 #define cons_view_col 720u
 
 #define cons_view_distance_to_eye 1.0f
-#define cons_view_resolusion 0.0025f
-#define cons_sample_phong_cnt 72
+#define cons_view_resolusion 0.0020f
+#define cons_sample_phong_cnt 64
 #define cons_pixel_sample_cnt 2
 #define cons_soft_shadow_sample_cnt 128
 #define cons_arr_random_size (10000000)
@@ -55,7 +55,11 @@ wxrt::sphere spheres[]{
 	init_sphere(0.0, -0.9, 0.3,  0.3,  3),
 	init_sphere(1.2, 0.0, 0.3,  0.3,  0),
 	init_sphere(-0.8, 0.0, 0.3,  0.3,  0),
-	init_sphere(0.0, 0.6, 0.3,  0.3,  4)
+	init_sphere(0.0, 0.6, 0.3,  0.3,  4),
+	init_sphere(-0.8, -1.2, 0.3,  0.3,  0),
+	init_sphere(-0.8, 1.2, 0.3,  0.3,  1),
+	init_sphere(1.2, -1.2, 0.3,  0.3,  2),
+	init_sphere(1.2, 1.2, 0.3,  0.3,  3),
 };
 
 wxrt::point_light point_lights[]{
@@ -63,11 +67,11 @@ wxrt::point_light point_lights[]{
 };
 
 wxrt::material materials[]{
-	{{1.0f, 1.0f, 1.0f}, {0.6f, 0.6f, 0.6f}, 1.0f, 5.0f },	//white
-	{{0.6f, 0.06f, 0.06f}, {0.6f, 0.06f, 0.06f}, 1.0f, 5.0f },	//red
-	{{0.06f, 0.6f, 0.06f}, {0.06f, 0.6f, 0.06f}, 1.0f, 5.0f },	//green
-	{{0.06f, 0.06f, 0.6f}, {0.06f, 0.06f, 0.6f}, 1.0f, 5.0f },	//blue
-	{{0.06f, 0.8f, 0.8f}, {0.06f, 0.8f, 0.8f}, 1.0f, 5.0f },	//
+	{{1.0f, 1.0f, 1.0f}, {0.6f, 0.6f, 0.6f}, 0.8f, 5.0f },	//white
+	{{0.6f, 0.06f, 0.06f}, {0.6f, 0.06f, 0.06f}, 0.8f, 5.0f },	//red
+	{{0.06f, 0.6f, 0.06f}, {0.06f, 0.6f, 0.06f}, 0.8f, 5.0f },	//green
+	{{0.06f, 0.06f, 0.6f}, {0.06f, 0.06f, 0.6f}, 0.8f, 5.0f },	//blue
+	{{0.06f, 0.8f, 0.8f}, {0.06f, 0.8f, 0.8f}, 0.8f, 64.0f },	//cyan
 };
 
 #define set_params_random arr_random, current_random_index
@@ -148,8 +152,7 @@ inline bool check_cross(const float_3& original_point, const float_3& dir, float
 	for (uint i = 0; i < arr_spheres.extent.size(); ++i) {
 		cid = make_id_sphere(i);
 		if (cid == ignore) continue;
-		if (check_cross(original_point, dir, alpha, arr_spheres[i])
-			&& alpha < min_alpha) {
+		if (arr_spheres[i].check_cross(original_point, dir, alpha, min_alpha) && alpha < min_alpha) {
 			min_alpha = alpha;
 			crossable_index = cid;
 		}
@@ -161,7 +164,7 @@ inline bool check_cross(const float_3& original_point, const float_3& dir, float
 
 inline float_3 random_direction(const float_3& normal, const float_3& n_1, 
 	const float_3& n_2, def_params_random) restrict(amp) {
-	float radius = randf(set_params_random);
+	float radius = randf(set_params_random) * 0.8f;
 	float height = sqrt(1.0f - radius * radius);
 	float select = randf(set_params_random) * 4.0f;
 	float select_1, select_2;
@@ -202,9 +205,7 @@ inline float_3 render_phong(uint current_crossable, const float_3& current_point
 		dir_to_ls /= far_to_ls;
 		if (dot(current_normal, dir_to_ls) < 0) continue;
 		if (soft_shadow) {
-			float_3 intensity(-1.0f, 0.0f, 0.0f);
 			float_3 delta, dir_to_ls_new;
-			uint id_triangle = 0xffffffff, id_sphere = 0xffffffff;
 			uint pass_cnt = 0;
 			for (uint j = 0; j < cons_soft_shadow_sample_cnt; ++j) {
 				delta = { randf(set_params_random) * 2.0f - 1.0f,
@@ -213,7 +214,8 @@ inline float_3 render_phong(uint current_crossable, const float_3& current_point
 				delta *= 1e-1f;
 				dir_to_ls_new = normalize(arr_point_lights[i].loc + delta - current_point);
 				if (!check_cross(current_point, dir_to_ls_new, ignore_float,
-					current_crossable, ignore_uint, set_params_crossables) || ignore_float > far_to_ls) {
+					current_crossable, ignore_uint, set_params_crossables) || 
+					ignore_float > far_to_ls) {
 					++pass_cnt;
 				}
 				continue;
@@ -260,7 +262,7 @@ inline float_3 sample_phong(const float_3& current_point, const float_3& normal,
 	for (uint i = 0; i < sample_cnt; ++i) {
 		new_dir = random_direction(normal, n_1, n_2, set_params_random);
 		float brdf = this_material.brdf(-new_dir, -view_dir , normal);
-		if (brdf < 1e-3) continue;
+		if (brdf < 1e-3f) continue;
 		//render phong
 		if (check_cross(current_point, new_dir, alpha, current_crossable, crossable_id, set_params_crossables)) {
 			float_3 cross_point = current_point + new_dir * alpha;
@@ -276,20 +278,21 @@ inline float_3 sample_phong(const float_3& current_point, const float_3& normal,
 }
 
 inline float_3 sample_all(const float_3& original_point, const float_3& view_dir,
+	float_3& sample_phong_res, float_3& render_phong_res,
 	const concurrency::array<material, 1>& arr_materials,
 	def_params_crossables, def_params_light_sources, def_params_random) restrict(amp) {
 	float alpha;
 	uint crossable_index = 0;
 	if (!check_cross(original_point, view_dir, alpha, -1, crossable_index, set_params_crossables))
-		return float_3(0.0f, 0.0f, 0.0f);
+		return sample_phong_res = render_phong_res = float_3(0.0f, 0.0f, 0.0f);
 	float_3 cross_point = original_point + view_dir * alpha;
 	float_3 normal = get_normal(crossable_index, cross_point, set_params_crossables);
 	if (dot(view_dir, normal) > 0) normal = -normal;
 	material material = arr_materials[get_material_id(crossable_index, set_params_crossables)];
 	//set small offset and render phong
-	float_3 render_phong_res = render_phong(crossable_index, cross_point, view_dir, 
+	render_phong_res = render_phong(crossable_index, cross_point, view_dir, 
 		normal, material, true, set_params_light_sources, set_params_crossables, set_params_random);
-	float_3 sample_phong_res = sample_phong(cross_point, normal, view_dir,
+	sample_phong_res = sample_phong(cross_point, normal, view_dir,
 		cons_sample_phong_cnt * cons_pixel_sample_cnt,
 		crossable_index, arr_materials, set_params_crossables,
 		set_params_light_sources, set_params_random);
@@ -317,7 +320,8 @@ int main() {
 	cv::namedWindow("wxnb", cv::WINDOW_AUTOSIZE);
 	view = cv::Mat(cons_view_row, cons_view_col, CV_8UC3);
 
-	concurrency::array_view<float_3, 2> arr_view_results(cons_view_row, cons_view_col);
+	concurrency::array_view<float_3, 2> arr_sample_results(cons_view_row, cons_view_col);
+	concurrency::array_view<float_3, 2> arr_render_results(cons_view_row, cons_view_col);
 	concurrency::array<triangle, 1> arr_triangles(len(triangles), triangles);
 	concurrency::array<material, 1> arr_materials(len(materials), materials);
 	concurrency::array<point_light, 1> arr_point_lights(len(point_lights), point_lights);
@@ -335,14 +339,9 @@ int main() {
 		look_at.z = 0.0f;
 		float_3 camera_up(0.0f, 0.0f, 1.0f);
 
-		spheres[0].o.x = 1.5f * cos(t / 32.0);
-		spheres[0].o.y = 1.5f * sin(t / 32.0);
-		spheres[1].o.x = 0.3f * sin(t / 64.0);
-		spheres[1].o.y = 0.3f * cos(t / 64.0);
 		concurrency::array<sphere, 1> arr_spheres(len(spheres), spheres);
-		uint rdbegin = rand() % cons_arr_random_size;
 
-		parallel_for_each(arr_view_results.extent,
+		parallel_for_each(arr_sample_results.extent,
 			[=, &arr_materials, &arr_point_lights, 
 				&arr_triangles, &arr_spheres, &arr_random,
 				&arr_random_init](index<2> idx) restrict(amp) {
@@ -359,17 +358,27 @@ int main() {
 				float_3 delta = normalize(o - eye);
 
 				uint& current_random_index = arr_random_init[idx];
-				arr_view_results[idx] = sample_all(o, delta, arr_materials,
+				sample_all(o, delta, arr_sample_results[idx], 
+					arr_render_results[idx], arr_materials,
 					set_params_crossables, set_params_light_sources, set_params_random);
 			});
 
+		uchar* view_ptr = view.ptr<uchar>(0);
 		for (int i = 0; i < cons_view_row; ++i)
 			for (int j = 0; j < cons_view_col; ++j){
-				cv::Vec3b& v = view.at<cv::Vec3b>(i, j);
-				float_3 res = arr_view_results[index<2>(i, j)];
-				v[0] = min(res.b, 1.0f) * 255;
-				v[1] = min(res.g, 1.0f) * 255;
-				v[2] = min(res.r, 1.0f) * 255;
+				float_3 res = arr_sample_results[index<2>(i, j)];
+				*(view_ptr++) = res.b * 255.0f;
+				*(view_ptr++) = res.g * 255.0f;
+				*(view_ptr++) = res.r * 255.0f;
+			}
+		cv::GaussianBlur(view, view, cv::Size(3, 3), 0.0f);
+		view_ptr = view.ptr<uchar>(0);
+		for (int i = 0; i < cons_view_row; ++i)
+			for (int j = 0; j < cons_view_col; ++j) {
+				float_3 res = arr_render_results[index<2>(i, j)];
+				*(view_ptr++) = min(*view_ptr + res.b * 255.0f, 255.0f);
+				*(view_ptr++) = min(*view_ptr + res.g * 255.0f, 255.0f);
+				*(view_ptr++) = min(*view_ptr + res.r * 255.0f, 255.0f);
 			}
 		cv::imshow("wxnb", view);
 		SYSTEMTIME nowt;

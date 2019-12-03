@@ -26,7 +26,9 @@ namespace wxrt {
 		float _shininess;
 		inline float brdf(const float_3& in, const float_3& out, const float_3& normal) const restrict(amp) {
 			float_3 h = normalize(out - in);
-			return _ks * pow(fmaxf(dot(h, normal), 0.0f), _shininess);
+			float d = dot(h, normal);
+			if (d <= 0.0f) return 0.0f;
+			return _ks * pow(d, _shininess);
 		}
 	};
 
@@ -72,7 +74,7 @@ namespace wxrt {
 			t = triangle.a - original_point;
 			det = -det;
 		}
-		if (det < 0.0f) return false;
+		if (det < 0.001f) return false;
 		float u = dot(t, p);
 		if (u < 0.0f || u > det) return false;
 		float_3 q = cross(t, e1);
@@ -88,21 +90,20 @@ namespace wxrt {
 		uint material_id;
 		//float_3 b_max;
 		//float_3 b_min;
+		inline bool check_cross(const float_3& original_point, const float_3& dir, 
+			float& alpha, float current_alpha) const restrict(amp) {
+			//if (cant_cross_bbox(sphere.b_max, sphere.b_min, dir, original_point)) return false;
+			//https://www.cnblogs.com/yoyo-sincerely/p/8401861.html
+			float_3 eo = o - original_point;
+			float v = dot(eo, dir);
+			if (v - r >= current_alpha) return false;
+			float v_2 = v * v;
+			alpha = r * r + v_2 - dot(eo, eo);
+			if (alpha < 0.0f || v_2 < alpha) return false;
+			alpha = v - sqrtf(alpha);
+			return alpha >= 0.0f;
+		}
 	};
-
-	inline bool check_cross(const float_3& original_point, const float_3& dir, float& alpha,
-		const sphere& sphere) restrict(amp) {
-		//if (cant_cross_bbox(sphere.b_max, sphere.b_min, dir, original_point)) return false;
-		//https://www.cnblogs.com/yoyo-sincerely/p/8401861.html
-		float_3 eo = sphere.o - original_point;
-		float v = dot(eo, dir);
-		float v_2 = v * v;
-		alpha = sphere.r * sphere.r + v_2 - dot(eo, eo);
-		if (alpha < 0.0f || v_2 < alpha) return false;
-		alpha = v - sqrtf(alpha);
-		return alpha >= 0.0f;
-		//TODO: WENXIN
-	}
 
 	inline float_3 get_normal(const sphere& sphere, const float_3& at) restrict(amp) {
 		return normalize(at - sphere.o);
