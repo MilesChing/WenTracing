@@ -15,15 +15,18 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="wxrt_tools_amp.h">
+    <ClInclude Include="crossable_amp.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="crossable_amp.h">
+    <ClInclude Include="ray_tracing.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="ray_tracing_tools_amp.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="main_amp.cpp">
+    <ClCompile Include="ray_tracing.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>

@@ -3,79 +3,51 @@
 #include <opencv2/opencv.hpp>
 #include <ctime>
 #include <random>
-#include "wxrt_tools_amp.h"
+#include "ray_tracing_tools_amp.h"
 #include "crossable_amp.h"
+#include "ray_tracing.h"
 #include <amprt.h>
 #include <ctime>
 #include <mutex>
 #include <amp.h>
 #include <windows.h>
 using namespace std;
-using namespace wxrt;
+using namespace ray_tracing;
 using namespace concurrency;
 using namespace concurrency::fast_math;
 using namespace concurrency::graphics;
 #define len(a) (sizeof(a) / sizeof(a[0]))
 
-#define cons_inf (1e10f);
-#define cons_pi (3.14159265f);
-#define cons_2_pi (3.14159265f * 2.0f);
-#define cons_pi_2 (3.14159265f / 2.0f);
+#define cons_inf (1e10f)
+#define cons_pi (3.14159265f)
+#define cons_2_pi (3.14159265f * 2.0f)
+#define cons_pi_2 (3.14159265f / 2.0f)
 
-#define cons_view_row 360u
-#define cons_view_col 720u
-
-#define cons_view_distance_to_eye 1.0f
-#define cons_view_resolusion 0.0020f
 #define cons_sample_phong_cnt 64
 #define cons_pixel_sample_cnt 2
-#define cons_soft_shadow_sample_cnt 128
-#define cons_arr_random_size (10000000)
+#define cons_soft_shadow_sample_cnt 64
 
 //#define ONLY_PHONG
+//#define ONLY_SAMPLE
+//#define REVERSE_SHADOW
 
-#define init_triangle(ax, ay, az, bx, by, bz, cx, cy, cz, material_id)	\
-	{{ax, ay, az}, {bx, by, bz}, {cx, cy, cz}, \
-	normalize(cross(float_3(bx, by, bz) - float_3(ax, ay, az), \
-	float_3(cx, cy, cz) - float_3(ax, ay, az))), material_id, \
-	/*{max(max(ax, bx), cx), max(max(ay, by), cy), max(max(az, bz), cz)},	\
-	{min(min(ax, bx), cx), min(min(ay, by), cy), min(min(az, bz), cz)}*/}
-
-#define init_sphere(ox, oy, oz, r, material_id)	\
-	{{ox, oy, oz}, r, material_id/*, {ox + r, oy + r, oz + r}, {ox - r, oy - r, oz - r}*/}
-
-wxrt::triangle triangles[]{
-	init_triangle(-10.0f, 10.0f, 0.0f,  -10.0f, -10.0f, 0.0f,  10.0f, -10.0f, 0.0f,  0),
-	init_triangle(-10.0f, 10.0f, 0.0f,  10.0f, 10.0f, 0.0f,  10.0f, -10.0f, 0.0f,  0),
+point_light point_lights[]{
+	{{0, 0, 30}, {1.0f, 0.99f, 0.8f}, 1.0f, 0.09f, 0.032f}
 };
 
-wxrt::sphere spheres[]{
-	init_sphere(0.0, -0.3, 0.3,  0.3,  1),
-	init_sphere(0.6, -0.3, 0.3,  0.3,  2),
-	init_sphere(0.0, -0.9, 0.3,  0.3,  3),
-	init_sphere(1.2, 0.0, 0.3,  0.3,  0),
-	init_sphere(-0.8, 0.0, 0.3,  0.3,  0),
-	init_sphere(0.0, 0.6, 0.3,  0.3,  4),
-	init_sphere(-0.8, -1.2, 0.3,  0.3,  0),
-	init_sphere(-0.8, 1.2, 0.3,  0.3,  1),
-	init_sphere(1.2, -1.2, 0.3,  0.3,  2),
-	init_sphere(1.2, 1.2, 0.3,  0.3,  3),
-};
-
-wxrt::point_light point_lights[]{
-	{{1.0f, 3.0f, 2.0f}, {0.8f, 0.8f, 0.8f}, 1.0f, 0.09f, 0.032f}
-};
-
-wxrt::material materials[]{
-	{{1.0f, 1.0f, 1.0f}, {0.6f, 0.6f, 0.6f}, 0.8f, 5.0f },	//white
-	{{0.6f, 0.06f, 0.06f}, {0.6f, 0.06f, 0.06f}, 0.8f, 5.0f },	//red
-	{{0.06f, 0.6f, 0.06f}, {0.06f, 0.6f, 0.06f}, 0.8f, 5.0f },	//green
-	{{0.06f, 0.06f, 0.6f}, {0.06f, 0.06f, 0.6f}, 0.8f, 5.0f },	//blue
-	{{0.06f, 0.8f, 0.8f}, {0.06f, 0.8f, 0.8f}, 0.8f, 64.0f },	//cyan
+material materials[]{
+	{0.5f, 1.0f, 0.5f, 4.0f, init_color(ff, ff, ff) },	//white
+	{0.5f, 1.0f, 0.5f, 4.0f, init_color(cc, 22, 08) },	//red
+	{0.5f, 1.0f, 0.5f, 4.0f, init_color(ff, b7, 00) },	//yellow
+	{0.5f, 1.0f, 0.5f, 4.0f, init_color(33, 80, 00) },	//green
+	{0.5f, 1.0f, 0.5f, 4.0f, init_color(80, 3c, 00) },	//brown
+	{0.5f, 1.0f, 0.5f, 4.0f, init_color(00, 36, cc) },	//blue
+	{0.5f, 1.0f, 0.5f, 4.0f, init_color(33, 33, 33) },	//black
+	{0.15f, 1.0f, 0.05f, 32.0f, {0.0f, 0.4f, 0.0f} }, //no reflection green
 };
 
 #define set_params_random arr_random, current_random_index
-#define def_params_random const concurrency::array<float, 1>& arr_random, uint& current_random_index
+#define def_params_random const concurrency::array_view<float, 1>& arr_random, uint& current_random_index
 
 #define set_params_crossables arr_triangles, arr_spheres
 #define def_params_crossables const concurrency::array<triangle, 1>& arr_triangles, \
@@ -89,7 +61,7 @@ wxrt::material materials[]{
 
 inline float randf(def_params_random) restrict(amp) {
 	//return xorshift(set_params_random) * 1.0f / 0xffffffff;
-	current_random_index = (current_random_index + 1) % cons_arr_random_size;
+	current_random_index = (current_random_index + 1);
 	return arr_random[current_random_index];
 }
 
@@ -142,7 +114,7 @@ inline bool check_cross(const float_3& original_point, const float_3& dir, float
 	for (uint i = 0; i < arr_triangles.extent.size(); ++i) {
 		cid = make_id_triangle(i);
 		if (cid == ignore) continue;
-		if (check_cross(original_point, dir, alpha, arr_triangles[i])
+		if (arr_triangles[i].check_cross(original_point, dir, alpha)
 			&& alpha < min_alpha) {
 			min_alpha = alpha;
 			crossable_index = cid;
@@ -197,12 +169,19 @@ inline float_3 render_phong(uint current_crossable, const float_3& current_point
 	def_params_crossables,
 	def_params_random) restrict(amp) {
 	float_3 result(0.0f, 0.0f, 0.0f);
+#ifdef REVERSE_SHADOW
+	float_3 all_lights(0.0f, 0.0f, 0.0f);
+#endif
 	float ignore_float;
 	uint ignore_uint;
 	for (uint i = 0; i < arr_point_lights.extent[0]; ++i) {
 		float_3 dir_to_ls = arr_point_lights[i].loc - current_point;
 		float far_to_ls = length(dir_to_ls);
 		dir_to_ls /= far_to_ls;
+#ifdef REVERSE_SHADOW
+		float_3 intensity = arr_point_lights[i].get_intensity(current_point, current_normal,
+			dir_to_ls, current_material);
+#endif
 		if (dot(current_normal, dir_to_ls) < 0) continue;
 		if (soft_shadow) {
 			float_3 delta, dir_to_ls_new;
@@ -211,7 +190,6 @@ inline float_3 render_phong(uint current_crossable, const float_3& current_point
 				delta = { randf(set_params_random) * 2.0f - 1.0f,
 					randf(set_params_random) * 2.0f - 1.0f,
 					randf(set_params_random) * 2.0f - 1.0f };
-				delta *= 1e-1f;
 				dir_to_ls_new = normalize(arr_point_lights[i].loc + delta - current_point);
 				if (!check_cross(current_point, dir_to_ls_new, ignore_float,
 					current_crossable, ignore_uint, set_params_crossables) || 
@@ -220,17 +198,22 @@ inline float_3 render_phong(uint current_crossable, const float_3& current_point
 				}
 				continue;
 			}
-
+#ifdef REVERSE_SHADOW
+			result -= (1.0f - pass_cnt * 1.0f / cons_soft_shadow_sample_cnt) *
+				arr_point_lights[i].get_intensity(current_point, current_normal,
+					dir_to_ls, current_material);
+#else
 			result = pass_cnt * 1.0f / cons_soft_shadow_sample_cnt * 
-				get_intensity(current_point, current_normal,
-				dir_to_ls, current_material, arr_point_lights[i]);
+				arr_point_lights[i].get_intensity(current_point, current_normal,
+				dir_to_ls, current_material);
+#endif
 		}
 		else {
 			if (!check_cross(current_point, dir_to_ls, ignore_float, 
 				current_crossable, ignore_uint,
 				set_params_crossables) || ignore_float >= far_to_ls) {
-				result = result + get_intensity(current_point, current_normal, 
-					dir_to_ls, current_material, arr_point_lights[i]);
+				result = result + arr_point_lights[i].get_intensity(current_point, 
+					current_normal, dir_to_ls, current_material);
 			}
 		}
 	}
@@ -271,9 +254,10 @@ inline float_3 sample_phong(const float_3& current_point, const float_3& normal,
 			current_material = arr_materials[get_material_id(crossable_id, set_params_crossables)];
 			res = res + render_phong(crossable_id, cross_point, new_dir, cross_norm,
 				current_material, false, set_params_light_sources, set_params_crossables, set_params_random) 
-				* this_material._ka * brdf;
+				* this_material.color * brdf;
 		}
 	}
+
 	return res / (float)sample_cnt;
 }
 
@@ -290,102 +274,168 @@ inline float_3 sample_all(const float_3& original_point, const float_3& view_dir
 	if (dot(view_dir, normal) > 0) normal = -normal;
 	material material = arr_materials[get_material_id(crossable_index, set_params_crossables)];
 	//set small offset and render phong
+#ifndef ONLY_SAMPLE
 	render_phong_res = render_phong(crossable_index, cross_point, view_dir, 
 		normal, material, true, set_params_light_sources, set_params_crossables, set_params_random);
-	sample_phong_res = sample_phong(cross_point, normal, view_dir,
-		cons_sample_phong_cnt * cons_pixel_sample_cnt,
-		crossable_index, arr_materials, set_params_crossables,
-		set_params_light_sources, set_params_random);
+#else
+	render_phong_res = 0.0f;
+#endif
+	if (crossable_index & 0xffff0000) {
+		sample_phong_res = sample_phong(cross_point, normal, view_dir,
+			cons_sample_phong_cnt * cons_pixel_sample_cnt,
+			crossable_index, arr_materials, set_params_crossables,
+			set_params_light_sources, set_params_random);
+	}
+	else sample_phong_res = 0.0f;
 	return sample_phong_res + render_phong_res;
 }
 
-cv::Mat view;
-
-uint random_init_table[cons_view_row][cons_view_col];
-float random_floats[cons_arr_random_size];
-
-void init_random_table() {
+ray_tracing_controller::ray_tracing_controller(){
 	srand(time(0));
-	for (int i = 0; i < cons_arr_random_size; ++i) {
-		random_floats[i] = rand() * 1.0f / RAND_MAX;
-	}
+	for (int i = 0; i < VIEW_ROW; ++i)
+		for (int j = 0; j < VIEW_COL; ++j)
+			self_arr_random_init[index<2>(i,j)] 
+				= rand() % RANDOM_TABLE_SIZE;
+	for (int i = 0; i < RANDOM_TABLE_SIZE; ++i)
+		self_arr_random[i] = rand() * 1.0f / RAND_MAX;
 
-	for (int i = 0; i < cons_view_row; ++i)
-		for (int j = 0; j < cons_view_col; ++j)
-			random_init_table[i][j] = rand() % cons_arr_random_size;
+	float width_d_height = VIEW_COL * 1.0f / VIEW_ROW;
+	float real_width = 2.0f * MIN_VIEW * tan(FOV / 360.0f * cons_pi) * width_d_height;
+	view_resolusion = real_width / VIEW_COL;
+}
+
+void ray_tracing_controller::render() {
+	update_messages();
+	const float_3 hori = normalize(cross(camera_up, look_at)) * -1.0;
+	const float_3 vert = normalize(cross(look_at, hori));
+	const float_3 origin = eye + normalize(look_at) * MIN_VIEW
+		- hori * (VIEW_COL / 2 * view_resolusion)
+		- vert * (VIEW_ROW / 2 * view_resolusion);
+	const float this_view_resolusion = view_resolusion;
+	const float_3 this_eye = eye;
+
+	concurrency::array<sphere, 1> arr_spheres(len(spheres), spheres);
+	concurrency::array<triangle, 1> arr_triangles(len(triangles), triangles);
+	concurrency::array_view<float_3, 2> arr_sample_results((int)VIEW_ROW, (int)VIEW_COL);
+	concurrency::array_view<float_3, 2> arr_render_results((int)VIEW_ROW, (int)VIEW_COL);
+	concurrency::array<material, 1> arr_materials(len(materials), materials);
+	concurrency::array<point_light, 1> arr_point_lights(len(point_lights), point_lights);
+	concurrency::array_view<uint, 2> arr_random_init(self_arr_random_init);
+	concurrency::array_view<float, 1> arr_random(self_arr_random);
+
+	parallel_for_each(arr_sample_results.extent,
+		[=, &arr_materials, &arr_point_lights,
+		&arr_triangles, &arr_spheres](index<2> idx) restrict(amp) {
+			uint r = idx[0], c = idx[1];
+			float_3 o = origin + hori * c * this_view_resolusion +
+				vert * r * this_view_resolusion;
+			float_3 delta = normalize(o - this_eye);
+			uint& current_random_index = arr_random_init[idx];
+			sample_all(o, delta, arr_sample_results[idx],
+				arr_render_results[idx], arr_materials,
+				set_params_crossables, set_params_light_sources, set_params_random);
+		});
+	
+	for(uint i = 0; i < VIEW_ROW; ++i)
+		for (uint j = 0; j < VIEW_COL; ++j) {
+			index<2> idx(i, j);
+			float_3 res = arr_render_results[idx] + 
+				arr_sample_results[idx];
+			results[i][j][0] = res.r;
+			results[i][j][1] = res.g;
+			results[i][j][2] = res.b;
+		}
+	
+	set_results();
+}
+
+float_3 seteye = float_3(0.0f, 0.0f, 5.0f);
+float_3 setlook_at = float_3(1.0f, 0.0f, 0.0f);
+float_3 setcamera_up = float_3(0.0f, 0.0f, 1.0f);
+
+void ray_tracing_controller::update_messages() {
+	eye = seteye;
+	look_at = setlook_at;
+	camera_up = setcamera_up;
+
+	triangles[0] = init_triangle(125, 65, -3, 125, -65, -3, -125, -65, -3, 7);
+	triangles[1] = init_triangle(-125, -65, -3, -125, 65, -3, 125, 65, -3, 7);
+
+	spheres[0] = init_sphere(0, 0, 0, 3, 0);
+	spheres[1] = init_sphere(12, 0, 0, 3, 1);
+	spheres[2] = init_sphere(24, 0, 0, 3, 2);
+	spheres[3] = init_sphere(36, 0, 0, 3, 3);
+	spheres[4] = init_sphere(48, 0, 0, 3, 4);
+	spheres[5] = init_sphere(60, 0, 0, 3, 5);
+	spheres[6] = init_sphere(72, 0, 0, 3, 6);
+	spheres[7] = init_sphere(84, 0, 0, 3, 1);
+	spheres[8] = init_sphere(96, 0, 0, 3, 1);
+	spheres[9] = init_sphere(108, 0, 0, 3, 1);
+}
+
+cv::Mat view;
+void ray_tracing_controller::set_results() {
+	uchar* view_ptr = view.ptr();
+	for (uint i = 0; i < VIEW_ROW; ++i)
+		for (uint j = 0; j < VIEW_COL; ++j) {
+			*(view_ptr++) = (int)(min(results[i][j][2], 1.0f) * 255.0f);
+			*(view_ptr++) = (int)(min(results[i][j][1], 1.0f) * 255.0f);
+			*(view_ptr++) = (int)(min(results[i][j][0], 1.0f) * 255.0f);
+		}
+}
+
+ray_tracing_controller rtc;
+
+void onMouse(int event, int x, int y, int flags, void* ustc) {
+
 }
 
 int main() {
 	srand(time(0));
 	cv::namedWindow("wxnb", cv::WINDOW_AUTOSIZE);
-	view = cv::Mat(cons_view_row, cons_view_col, CV_8UC3);
-
-	concurrency::array_view<float_3, 2> arr_sample_results(cons_view_row, cons_view_col);
-	concurrency::array_view<float_3, 2> arr_render_results(cons_view_row, cons_view_col);
-	concurrency::array<triangle, 1> arr_triangles(len(triangles), triangles);
-	concurrency::array<material, 1> arr_materials(len(materials), materials);
-	concurrency::array<point_light, 1> arr_point_lights(len(point_lights), point_lights);
-
-	init_random_table();
-	concurrency::array<float, 1> arr_random(cons_arr_random_size, random_floats);
-	concurrency::array<uint, 2> arr_random_init(cons_view_row, cons_view_col, (uint*)random_init_table);
+	cv::setMouseCallback("wxnb", onMouse, 0);
+	view = cv::Mat(VIEW_ROW, VIEW_COL, CV_8UC3);
 
 	SYSTEMTIME time;
 
 	for (uint t = 0;; ++t) {
 		GetLocalTime(&time);
-		float_3 eye(cos(t / 64.0) * 3.0f, sin(t / 64.0) * 3.0f, 0.5f);
-		float_3 look_at = -eye;
-		look_at.z = 0.0f;
-		float_3 camera_up(0.0f, 0.0f, 1.0f);
-
-		concurrency::array<sphere, 1> arr_spheres(len(spheres), spheres);
-
-		parallel_for_each(arr_sample_results.extent,
-			[=, &arr_materials, &arr_point_lights, 
-				&arr_triangles, &arr_spheres, &arr_random,
-				&arr_random_init](index<2> idx) restrict(amp) {
-				uint r = idx[0], c = idx[1];
-
-				const float_3 hori = normalize(cross(camera_up, look_at)) * -1.0;
-				const float_3 vert = normalize(camera_up) * -1.0;
-				const float_3 origin = eye + normalize(look_at) * cons_view_distance_to_eye
-					- hori * (cons_view_col / 2 * cons_view_resolusion)
-					- vert * (cons_view_row / 2 * cons_view_resolusion);
-
-				float_3 o = origin + hori * c * cons_view_resolusion +
-					vert * r * cons_view_resolusion;
-				float_3 delta = normalize(o - eye);
-
-				uint& current_random_index = arr_random_init[idx];
-				sample_all(o, delta, arr_sample_results[idx], 
-					arr_render_results[idx], arr_materials,
-					set_params_crossables, set_params_light_sources, set_params_random);
-			});
-
-		uchar* view_ptr = view.ptr<uchar>(0);
-		for (int i = 0; i < cons_view_row; ++i)
-			for (int j = 0; j < cons_view_col; ++j){
-				float_3 res = arr_sample_results[index<2>(i, j)];
-				*(view_ptr++) = res.b * 255.0f;
-				*(view_ptr++) = res.g * 255.0f;
-				*(view_ptr++) = res.r * 255.0f;
-			}
-		cv::GaussianBlur(view, view, cv::Size(3, 3), 0.0f);
-		view_ptr = view.ptr<uchar>(0);
-		for (int i = 0; i < cons_view_row; ++i)
-			for (int j = 0; j < cons_view_col; ++j) {
-				float_3 res = arr_render_results[index<2>(i, j)];
-				*(view_ptr++) = min(*view_ptr + res.b * 255.0f, 255.0f);
-				*(view_ptr++) = min(*view_ptr + res.g * 255.0f, 255.0f);
-				*(view_ptr++) = min(*view_ptr + res.r * 255.0f, 255.0f);
-			}
+		rtc.render();
 		cv::imshow("wxnb", view);
 		SYSTEMTIME nowt;
 		GetLocalTime(&nowt);
 		double fps = 1000.0 / (nowt.wMilliseconds - time.wMilliseconds);
 		if (fps > 0) cerr << "\rFPS: " << fps;
-		cv::waitKey(1);
+		int k = cv::waitKey(10);
+		switch (k)
+		{
+		case 'w':
+			seteye += 0.2f * setlook_at;
+			break;
+		case 's':
+			seteye -= 0.2f * setlook_at;
+			break;
+		case 'a':
+			seteye -= 0.2f * cross(setlook_at, setcamera_up);
+			break;
+		case 'd':
+			seteye += 0.2f * cross(setlook_at, setcamera_up);
+			break;
+		case 'j':
+			setlook_at = normalize(setlook_at - 0.01f * cross(setlook_at, setcamera_up));
+			break;
+		case 'l':
+			setlook_at = normalize(setlook_at + 0.01f * cross(setlook_at, setcamera_up));
+			break;
+		case 'i':
+			setlook_at = normalize(setlook_at - 0.01f * cross(setlook_at, cross(setlook_at, setcamera_up)));
+			break;
+		case 'k':
+			setlook_at = normalize(setlook_at + 0.01f * cross(setlook_at, cross(setlook_at, setcamera_up)));
+			break;
+		default:
+			break;
+		}
 	}
 
 		

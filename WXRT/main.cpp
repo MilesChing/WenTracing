@@ -232,7 +232,7 @@ float_3 cal(uint shape_id, const float_3& cross_point,
 		//--------------check cross
 		float min_alpha = 1e10;
 		uint min_shape_id;
-		float_3 start_point = cross_point + new_direct * 0.01;
+		float_3 start_point = cross_point + new_direct * 0.01f;
 		for (int i = 0; i < len(crossables); ++i) {
 			float alpha;
 			if (crossables[i]->check_cross(start_point, new_direct, alpha) && alpha < min_alpha) {

@@ -134,10 +134,11 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="crossable_amp.h" />
-    <ClInclude Include="wxrt_tools_amp.h" />
+    <ClInclude Include="ray_tracing.h" />
+    <ClInclude Include="ray_tracing_tools_amp.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="main_amp.cpp" />
+    <ClCompile Include="ray_tracing.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
